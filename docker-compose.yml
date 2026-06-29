@@ -1,0 +1,44 @@
+version: "3.9"
+
+services:
+  bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      # Use a fake token; the mock-telegram service handles API calls.
+      BOT_TOKEN: "test:bot-token"
+      GROQ_API_KEY: "test-groq-key"
+      LOG_LEVEL: "debug"
+      POLLING_MODE: "long_polling"
+      # Override service base URLs to point at local mocks.
+      TELEGRAM_API_URL: "http://mock-telegram:8081"
+      GROQ_API_URL: "http://mock-groq:8082"
+    depends_on:
+      - mock-telegram
+      - mock-groq
+    restart: unless-stopped
+
+  # Minimal Telegram Bot API mock — returns empty update lists and accepts sends.
+  mock-telegram:
+    image: alpine:3.19
+    command: >
+      sh -c "apk add --no-cache socat &&
+             while true; do
+               echo -e 'HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r\n{\"ok\":true,\"result\":[]}' |
+               socat - TCP-LISTEN:8081,reuseaddr,fork;
+             done"
+    ports:
+      - "8081:8081"
+
+  # Minimal Groq API mock — returns a fixed transcription.
+  mock-groq:
+    image: alpine:3.19
+    command: >
+      sh -c "apk add --no-cache socat &&
+             while true; do
+               echo -e 'HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r\n{\"text\":\"integration test transcription\"}' |
+               socat - TCP-LISTEN:8082,reuseaddr,fork;
+             done"
+    ports:
+      - "8082:8082"

@@ -1,0 +1,36 @@
+# Binaries
+bot
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Build output
+/dist/
+
+# Test cache and coverage
+*.test
+*.out
+coverage.html
+coverage.txt
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# Editor directories and files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Go workspace
+go.work
+go.work.sum
