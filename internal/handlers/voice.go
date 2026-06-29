@@ -4,8 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"os"
-
 	"go-telegram-template/internal/flows"
 	"go-telegram-template/pkg/models"
 )
@@ -51,23 +49,15 @@ func (h *VoiceHandler) ProcessVoice(ctx context.Context, chatID, userID int64, f
 	if err != nil {
 		return fmt.Errorf("get file info: %w", err)
 	}
-	h.logger.DebugContext(ctx, "voice file path resolved",
-		slog.String("file_path", filePath),
-		slog.String("download_url", "https://api.telegram.org/file/bot<TOKEN>/"+filePath),
-	)
+	h.logger.DebugContext(ctx, "voice file path resolved", slog.String("file_path", filePath))
 
 	data, err := h.tg.DownloadFile(ctx, filePath)
 	if err != nil {
 		return fmt.Errorf("download file: %w", err)
 	}
-	const localPath = "/tmp/voice.ogg"
-	if err := os.WriteFile(localPath, data, 0o600); err != nil {
-		h.logger.WarnContext(ctx, "could not save voice file for debugging", slog.String("error", err.Error()))
-	}
 	h.logger.DebugContext(ctx, "voice file downloaded",
 		slog.String("file_path", filePath),
 		slog.Int("bytes", len(data)),
-		slog.String("saved_to", localPath),
 	)
 
 	_, err = h.tg.SendMessage(ctx, chatID, "Transcribing…")

@@ -131,10 +131,6 @@ func (c *Client) doTranscribe(ctx context.Context, audioData []byte, filename st
 		slog.String("language", lang),
 		slog.String("filename", filename),
 		slog.Int("audio_bytes", len(audioData)),
-		slog.String("curl_repro", fmt.Sprintf(
-			"curl -s -X POST '%s' -H 'Authorization: Bearer %s' -F 'file=@/tmp/%s;type=audio/ogg' -F 'model=%s' -F 'response_format=json' -F 'language=%s'",
-			endpoint, c.apiKey, filename, c.model, lang,
-		)),
 	)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, &body)
