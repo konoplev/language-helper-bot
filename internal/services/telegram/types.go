@@ -1,6 +1,6 @@
 package telegram
 
-import "go-telegram-template/pkg/models"
+import "deutsch-helper/pkg/models"
 
 // apiResponse is the envelope returned by every Telegram Bot API method.
 type apiResponse[T any] struct {
@@ -26,6 +26,12 @@ type File struct {
 	FileSize int    `json:"file_size,omitempty"`
 }
 
+// BotCommand represents a single command in the Telegram bot command menu.
+type BotCommand struct {
+	Command     string `json:"command"`
+	Description string `json:"description"`
+}
+
 // ---- request bodies ----
 
 type sendMessageRequest struct {
@@ -37,12 +43,12 @@ type sendMessageRequest struct {
 
 type sendVoiceRequest struct {
 	ChatID int64  `json:"chat_id"`
-	Voice  string `json:"voice"` // Telegram file_id
+	Voice  string `json:"voice"`
 }
 
 type sendPhotoRequest struct {
 	ChatID  int64  `json:"chat_id"`
-	Photo   string `json:"photo"` // Telegram file_id
+	Photo   string `json:"photo"`
 	Caption string `json:"caption,omitempty"`
 }
 
@@ -64,4 +70,8 @@ type getFileRequest struct {
 type answerCallbackQueryRequest struct {
 	CallbackQueryID string `json:"callback_query_id"`
 	Text            string `json:"text,omitempty"`
+}
+
+type setMyCommandsRequest struct {
+	Commands []BotCommand `json:"commands"`
 }

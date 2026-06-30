@@ -3,34 +3,35 @@ package store
 import (
 	"context"
 	"sync"
+
+	"deutsch-helper/pkg/models"
 )
 
-// PrefsStore persists per-user preferences across the bot session.
-type PrefsStore interface {
-	Language(ctx context.Context, userID int64) (string, bool)
-	SetLanguage(ctx context.Context, userID int64, lang string) error
-}
-
-// InMemoryPrefs is a thread-safe in-memory PrefsStore.
+// InMemoryPrefs is a thread-safe in-memory PrefsStore used in tests.
 type InMemoryPrefs struct {
-	mu    sync.RWMutex
-	langs map[int64]string
+	mu   sync.RWMutex
+	data map[int64]*models.UserSettings
 }
 
 func NewInMemoryPrefs() *InMemoryPrefs {
-	return &InMemoryPrefs{langs: make(map[int64]string)}
+	return &InMemoryPrefs{data: make(map[int64]*models.UserSettings)}
 }
 
-func (p *InMemoryPrefs) Language(_ context.Context, userID int64) (string, bool) {
+func (p *InMemoryPrefs) GetSettings(_ context.Context, userID int64) (*models.UserSettings, bool) {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
-	l, ok := p.langs[userID]
-	return l, ok
+	s, ok := p.data[userID]
+	if !ok {
+		return nil, false
+	}
+	cp := *s
+	return &cp, true
 }
 
-func (p *InMemoryPrefs) SetLanguage(_ context.Context, userID int64, lang string) error {
+func (p *InMemoryPrefs) SaveSettings(_ context.Context, userID int64, settings *models.UserSettings) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	p.langs[userID] = lang
+	cp := *settings
+	p.data[userID] = &cp
 	return nil
 }

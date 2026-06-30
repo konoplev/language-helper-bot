@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"go-telegram-template/internal/services/groq"
+	"deutsch-helper/internal/services/groq"
 )
 
 type transcriptionResponse struct {

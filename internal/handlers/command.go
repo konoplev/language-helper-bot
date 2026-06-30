@@ -5,33 +5,38 @@ import (
 	"fmt"
 	"log/slog"
 
-	"go-telegram-template/internal/flows"
-	"go-telegram-template/pkg/models"
+	"deutsch-helper/internal/flows"
+	"deutsch-helper/pkg/models"
 )
 
-// CommandHandler handles Telegram bot commands (/start, /help, etc.).
+const (
+	CmdFrom   = "from"
+	CmdTo     = "to"
+	CmdPolish = "polish"
+)
+
+// CommandHandler handles bot commands (/start, /from, /to, /polish).
 type CommandHandler struct {
 	tg       TelegramAPI
 	flow     flows.Manager
+	prefs    PrefsStore
 	commands map[string]func(ctx context.Context, uc models.UpdateContext) error
 	logger   *slog.Logger
 }
 
-func NewCommandHandler(tg TelegramAPI, flow flows.Manager, logger *slog.Logger) *CommandHandler {
+func NewCommandHandler(tg TelegramAPI, flow flows.Manager, prefs PrefsStore, logger *slog.Logger) *CommandHandler {
 	h := &CommandHandler{
 		tg:       tg,
 		flow:     flow,
+		prefs:    prefs,
 		commands: make(map[string]func(ctx context.Context, uc models.UpdateContext) error),
 		logger:   logger,
 	}
-	h.Register("start", h.handleStart)
-	h.Register("help", h.handleHelp)
+	h.commands["start"] = h.handleStart
+	h.commands["from"] = h.handleFrom
+	h.commands["to"] = h.handleTo
+	h.commands["polish"] = h.handlePolish
 	return h
-}
-
-// Register adds a custom command handler.
-func (h *CommandHandler) Register(cmd string, fn func(ctx context.Context, uc models.UpdateContext) error) {
-	h.commands[cmd] = fn
 }
 
 func (h *CommandHandler) CanHandle(uc models.UpdateContext) bool {
@@ -48,24 +53,70 @@ func (h *CommandHandler) Handle(ctx context.Context, uc models.UpdateContext) er
 	return fn(ctx, uc)
 }
 
-// handleStart always shows the language picker so the user can (re-)select their
-// preferred transcription language at the start of each session.
+// handleStart begins the setup wizard: native language → learning language → level.
 func (h *CommandHandler) handleStart(ctx context.Context, uc models.UpdateContext) error {
-	kb := flows.LanguageKeyboard()
-	_, err := h.tg.SendMessageWithKeyboard(ctx, uc.ChatID,
-		"👋 Hello! I'm your voice transcription bot.\n\n🌍 Please choose your language:", kb)
-	if err != nil {
-		return err
-	}
 	if h.flow != nil {
-		st := flows.NewUserState(uc.UserID, flows.FlowLanguage, flows.StateLanguageSelect)
-		return h.flow.SetState(ctx, st)
+		st := flows.NewUserState(uc.UserID, flows.FlowSetup, flows.StateSetupNative)
+		if err := h.flow.SetState(ctx, st); err != nil {
+			return err
+		}
 	}
-	return nil
+	kb := flows.NativeLanguageKeyboard()
+	_, err := h.tg.SendMessageWithKeyboard(ctx, uc.ChatID,
+		"👋 Welcome! Let's set up your language learning assistant.\n\nWhat is your native language?", kb)
+	return err
 }
 
-func (h *CommandHandler) handleHelp(ctx context.Context, uc models.UpdateContext) error {
-	text := "Available commands:\n/start — choose your language and get started\n/help — this help text\n\nSend a voice message to transcribe it."
-	_, err := h.tg.SendMessage(ctx, uc.ChatID, text)
+func (h *CommandHandler) handleFrom(ctx context.Context, uc models.UpdateContext) error {
+	return h.activateCommand(ctx, uc, CmdFrom)
+}
+
+func (h *CommandHandler) handleTo(ctx context.Context, uc models.UpdateContext) error {
+	return h.activateCommand(ctx, uc, CmdTo)
+}
+
+func (h *CommandHandler) handlePolish(ctx context.Context, uc models.UpdateContext) error {
+	return h.activateCommand(ctx, uc, CmdPolish)
+}
+
+func (h *CommandHandler) activateCommand(ctx context.Context, uc models.UpdateContext, cmd string) error {
+	if h.prefs == nil {
+		_, err := h.tg.SendMessage(ctx, uc.ChatID, "Please run /start first to configure your language settings.")
+		return err
+	}
+	settings, ok := h.prefs.GetSettings(ctx, uc.UserID)
+	if !ok || !settings.IsConfigured() {
+		_, err := h.tg.SendMessage(ctx, uc.ChatID, "Please run /start first to configure your language settings.")
+		return err
+	}
+	settings.ActiveCommand = cmd
+	if err := h.prefs.SaveSettings(ctx, uc.UserID, settings); err != nil {
+		return err
+	}
+	// Clear any stale voice flow state.
+	if h.flow != nil {
+		_ = h.flow.ClearState(ctx, uc.UserID)
+	}
+
+	var prompt string
+	switch cmd {
+	case CmdFrom:
+		prompt = fmt.Sprintf("✅ Mode: Translate %s → %s (%s level)\n\nSend text or voice in %s:",
+			models.LanguageName(settings.NativeLanguage),
+			models.LanguageName(settings.LearningLanguage),
+			settings.Level,
+			models.LanguageName(settings.NativeLanguage))
+	case CmdTo:
+		prompt = fmt.Sprintf("✅ Mode: Translate %s → %s\n\nSend text or voice in %s:",
+			models.LanguageName(settings.LearningLanguage),
+			models.LanguageName(settings.NativeLanguage),
+			models.LanguageName(settings.LearningLanguage))
+	case CmdPolish:
+		prompt = fmt.Sprintf("✅ Mode: Grammar check & correction (%s, %s level)\n\nSend text or voice in %s:",
+			models.LanguageName(settings.LearningLanguage),
+			settings.Level,
+			models.LanguageName(settings.LearningLanguage))
+	}
+	_, err := h.tg.SendMessage(ctx, uc.ChatID, prompt)
 	return err
 }

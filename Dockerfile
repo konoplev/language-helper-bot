@@ -8,4 +8,6 @@ RUN CGO_ENABLED=0 go build -o /bot ./cmd/bot
 FROM alpine:3.19
 RUN apk add --no-cache ca-certificates
 COPY --from=builder /bot /bot
+COPY allowed_users.txt /app/allowed_users.txt
+WORKDIR /app
 ENTRYPOINT ["/bot"]

@@ -4,14 +4,12 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"go-telegram-template/internal/flows"
-	"go-telegram-template/pkg/models"
+
+	"deutsch-helper/internal/flows"
+	"deutsch-helper/pkg/models"
 )
 
-// VoiceHandler downloads a Telegram voice message, transcribes it via Groq,
-// and presents a draft to the user with editing options.
-// If the user has not yet selected a language, it asks them first and queues the
-// voice message for automatic transcription once a language is chosen.
+// VoiceHandler transcribes voice messages and awaits the user's final text.
 type VoiceHandler struct {
 	tg          TelegramAPI
 	transcriber Transcriber
@@ -29,39 +27,48 @@ func (h *VoiceHandler) CanHandle(uc models.UpdateContext) bool {
 }
 
 func (h *VoiceHandler) Handle(ctx context.Context, uc models.UpdateContext) error {
-	lang, ok := h.prefs.Language(ctx, uc.UserID)
-	if !ok {
-		return h.requestLanguage(ctx, uc)
+	settings, ok := h.prefs.GetSettings(ctx, uc.UserID)
+	if !ok || !settings.IsConfigured() {
+		_, err := h.tg.SendMessage(ctx, uc.ChatID, "Please run /start first to configure your language settings.")
+		return err
 	}
-	return h.ProcessVoice(ctx, uc.ChatID, uc.UserID, uc.Update.Message.Voice.FileID, lang)
+	if settings.ActiveCommand == "" {
+		_, err := h.tg.SendMessage(ctx, uc.ChatID, "Please select a command first: /from, /to, or /polish")
+		return err
+	}
+
+	lang := transcriptionLanguage(settings)
+	return h.processVoice(ctx, uc.ChatID, uc.UserID, uc.Update.Message.Voice.FileID, lang, settings.ActiveCommand)
 }
 
-// ProcessVoice implements VoiceProcessor: downloads a voice message by file_id,
-// transcribes it in the given language, and sends a draft with an inline keyboard.
-func (h *VoiceHandler) ProcessVoice(ctx context.Context, chatID, userID int64, fileID, lang string) error {
+// transcriptionLanguage returns the ISO 639-1 code to use for transcription.
+// For /from the user speaks in their native language; for /to and /polish they speak in the learning language.
+func transcriptionLanguage(s *models.UserSettings) string {
+	if s.ActiveCommand == CmdFrom {
+		return s.NativeLanguage
+	}
+	return s.LearningLanguage
+}
+
+func (h *VoiceHandler) processVoice(ctx context.Context, chatID, userID int64, fileID, lang, activeCommand string) error {
 	h.logger.InfoContext(ctx, "processing voice message",
 		slog.Int64("user_id", userID),
 		slog.String("file_id", fileID),
 		slog.String("lang", lang),
+		slog.String("command", activeCommand),
 	)
 
 	filePath, err := h.tg.GetFile(ctx, fileID)
 	if err != nil {
 		return fmt.Errorf("get file info: %w", err)
 	}
-	h.logger.DebugContext(ctx, "voice file path resolved", slog.String("file_path", filePath))
 
 	data, err := h.tg.DownloadFile(ctx, filePath)
 	if err != nil {
 		return fmt.Errorf("download file: %w", err)
 	}
-	h.logger.DebugContext(ctx, "voice file downloaded",
-		slog.String("file_path", filePath),
-		slog.Int("bytes", len(data)),
-	)
 
-	_, err = h.tg.SendMessage(ctx, chatID, "Transcribing…")
-	if err != nil {
+	if _, err := h.tg.SendMessage(ctx, chatID, "Transcribing…"); err != nil {
 		h.logger.WarnContext(ctx, "failed to send transcribing notice", slog.String("error", err.Error()))
 	}
 
@@ -72,39 +79,23 @@ func (h *VoiceHandler) ProcessVoice(ctx context.Context, chatID, userID int64, f
 
 	h.logger.InfoContext(ctx, "transcription complete",
 		slog.Int64("user_id", userID),
-		slog.Int("text_len", len(text)),
 		slog.String("text", text),
 	)
+
+	// Save state so the next text message is treated as the final (possibly corrected) input.
+	st := flows.NewUserState(userID, flows.FlowVoice, flows.StateVoicePending)
+	st.Payload[flows.PayloadPendingTranscription] = text
+	st.Payload[flows.PayloadActiveCommand] = activeCommand
+	if err := h.flow.SetState(ctx, st); err != nil {
+		return err
+	}
 
 	kb := models.NewInlineKeyboard(
 		models.NewKeyboardRow(
 			models.NewCallbackButton("Edit", flows.CallbackVoiceEdit),
-			models.NewCallbackButton("Send as text", flows.CallbackVoiceSendText),
-			models.NewCallbackButton("Send as command", flows.CallbackVoiceSendCommand),
+			models.NewCallbackButton("Send as is", flows.CallbackVoiceSendText),
 		),
 	)
-
-	msgID, err := h.tg.SendMessageWithKeyboard(ctx, chatID, text, kb)
-	if err != nil {
-		return fmt.Errorf("send draft: %w", err)
-	}
-
-	st := flows.NewUserState(userID, flows.FlowVoice, flows.StateVoiceDraft)
-	st.Payload[flows.PayloadDraftText] = text
-	st.Payload[flows.PayloadDraftMsgID] = msgID
-	return h.flow.SetState(ctx, st)
-}
-
-// requestLanguage saves the pending voice file_id and asks the user to pick a language.
-// CallbackHandler will auto-transcribe the pending voice once a language is chosen.
-func (h *VoiceHandler) requestLanguage(ctx context.Context, uc models.UpdateContext) error {
-	st := flows.NewUserState(uc.UserID, flows.FlowLanguage, flows.StateLanguageSelect)
-	st.Payload[flows.PayloadPendingVoiceID] = uc.Update.Message.Voice.FileID
-	if err := h.flow.SetState(ctx, st); err != nil {
-		return err
-	}
-	kb := flows.LanguageKeyboard()
-	_, err := h.tg.SendMessageWithKeyboard(ctx, uc.ChatID,
-		"🌍 Please choose your language for voice transcription:", kb)
+	_, err = h.tg.SendMessageWithKeyboard(ctx, chatID, "🎙 Transcription:\n\n"+text, kb)
 	return err
 }

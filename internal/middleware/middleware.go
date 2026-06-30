@@ -6,7 +6,7 @@ import (
 	"log/slog"
 	"time"
 
-	"go-telegram-template/pkg/models"
+	"deutsch-helper/pkg/models"
 )
 
 type HandlerFunc func(ctx context.Context, uc models.UpdateContext) error

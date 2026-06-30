@@ -1,6 +1,5 @@
-// Package integration_test wires real telegram.Client and groq.Client to local
-// httptest servers and exercises complete handler pipelines.
-// No interface stubs are used for the external service layer.
+// Package integration_test wires real telegram.Client, groq.Client, and openai.Client
+// to local httptest servers and exercises complete handler pipelines end-to-end.
 package integration_test
 
 import (
@@ -16,22 +15,19 @@ import (
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 
-	"go-telegram-template/internal/flows"
-	"go-telegram-template/internal/handlers"
-	"go-telegram-template/internal/services/groq"
-	"go-telegram-template/internal/services/telegram"
-	"go-telegram-template/internal/store"
-	"go-telegram-template/pkg/models"
+	"deutsch-helper/internal/flows"
+	"deutsch-helper/internal/handlers"
+	"deutsch-helper/internal/services/groq"
+	"deutsch-helper/internal/services/openai"
+	"deutsch-helper/internal/services/telegram"
+	"deutsch-helper/internal/store"
+	"deutsch-helper/pkg/models"
 )
-
-// ---- constants ----
 
 const testToken = "integration-test-token"
 
-// ---- minimal dispatcher (avoids importing internal/bot) ----
+// ---- minimal dispatcher ----
 
-// minDispatcher satisfies handlers.Dispatcher using the same first-match logic
-// as the real bot.Dispatcher.
 type minDispatcher struct {
 	mu       sync.RWMutex
 	handlers []handlers.Handler
@@ -56,20 +52,19 @@ func (d *minDispatcher) Dispatch(ctx context.Context, uc models.UpdateContext) e
 	return nil
 }
 
-// ---- Telegram mock server ----
+// ---- Telegram mock ----
 
-// telegramCalls captures per-method call counts and request bodies.
 type telegramCalls struct {
 	GetFile        atomic.Int32
 	DownloadFile   atomic.Int32
 	SendMessage    atomic.Int32
 	AnswerCallback atomic.Int32
-	EditMessage    atomic.Int32
+	SetCommands    atomic.Int32
 
 	mu          sync.Mutex
-	sentTexts   []string // text field of every sendMessage call
-	sentMarkups []bool   // true if the sendMessage included reply_markup
-	lastFileID  string   // file_id from most recent getFile request
+	sentTexts   []string
+	sentMarkups []bool
+	lastFileID  string
 }
 
 func (c *telegramCalls) appendSend(text string, hasMarkup bool) {
@@ -87,39 +82,27 @@ func (c *telegramCalls) SentTexts() []string {
 	return out
 }
 
-// newTelegramMock builds an httptest server that mimics the Telegram Bot API.
-// filePath is returned by /getFile; fileBytes are served at the download path.
 func newTelegramMock(t *testing.T, filePath string, fileBytes []byte) (*httptest.Server, *telegramCalls) {
 	t.Helper()
 	calls := &telegramCalls{}
 	mux := http.NewServeMux()
-
 	apiPrefix := "/bot" + testToken + "/"
 
-	// getFile
 	mux.HandleFunc(apiPrefix+"getFile", func(w http.ResponseWriter, r *http.Request) {
 		calls.GetFile.Add(1)
-		var req struct {
-			FileID string `json:"file_id"`
-		}
+		var req struct{ FileID string `json:"file_id"` }
 		_ = json.NewDecoder(r.Body).Decode(&req)
 		calls.mu.Lock()
 		calls.lastFileID = req.FileID
 		calls.mu.Unlock()
-		apiResp(t, w, map[string]any{
-			"file_id":   req.FileID,
-			"file_path": filePath,
-		})
+		apiResp(t, w, map[string]any{"file_id": req.FileID, "file_path": filePath})
 	})
 
-	// downloadFile  (served under /file/bot<token>/<filePath>)
-	mux.HandleFunc("/file/bot"+testToken+"/", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/file/bot"+testToken+"/", func(w http.ResponseWriter, _ *http.Request) {
 		calls.DownloadFile.Add(1)
-		w.Header().Set("Content-Type", "audio/ogg")
 		w.Write(fileBytes)
 	})
 
-	// sendMessage (plain text and with keyboard share the same endpoint)
 	mux.HandleFunc(apiPrefix+"sendMessage", func(w http.ResponseWriter, r *http.Request) {
 		n := calls.SendMessage.Add(1)
 		body, _ := io.ReadAll(r.Body)
@@ -129,22 +112,17 @@ func newTelegramMock(t *testing.T, filePath string, fileBytes []byte) (*httptest
 		}
 		_ = json.Unmarshal(body, &req)
 		calls.appendSend(req.Text, len(req.ReplyMarkup) > 0)
-		apiResp(t, w, map[string]any{
-			"message_id": int(n) * 10,
-			"chat":       map[string]any{"id": 99999},
-		})
+		apiResp(t, w, map[string]any{"message_id": int(n) * 10, "chat": map[string]any{"id": 99999}})
 	})
 
-	// answerCallbackQuery
-	mux.HandleFunc(apiPrefix+"answerCallbackQuery", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc(apiPrefix+"answerCallbackQuery", func(w http.ResponseWriter, _ *http.Request) {
 		calls.AnswerCallback.Add(1)
 		apiResp(t, w, true)
 	})
 
-	// editMessageText
-	mux.HandleFunc(apiPrefix+"editMessageText", func(w http.ResponseWriter, r *http.Request) {
-		calls.EditMessage.Add(1)
-		apiResp(t, w, map[string]any{"message_id": 1, "chat": map[string]any{"id": 99999}})
+	mux.HandleFunc(apiPrefix+"setMyCommands", func(w http.ResponseWriter, _ *http.Request) {
+		calls.SetCommands.Add(1)
+		apiResp(t, w, true)
 	})
 
 	srv := httptest.NewServer(mux)
@@ -152,7 +130,7 @@ func newTelegramMock(t *testing.T, filePath string, fileBytes []byte) (*httptest
 	return srv, calls
 }
 
-// ---- Groq mock server ----
+// ---- Groq mock ----
 
 type groqCalls struct {
 	Transcriptions atomic.Int32
@@ -161,8 +139,7 @@ type groqCalls struct {
 	authHeaders   []string
 	modelFields   []string
 	receivedBytes [][]byte
-	// nextStatus controls what HTTP status to return; 0 means 200.
-	nextStatus []int
+	nextStatus    []int
 }
 
 func (g *groqCalls) setStatuses(codes ...int) {
@@ -185,16 +162,13 @@ func (g *groqCalls) popStatus() int {
 func newGroqMock(t *testing.T, transcribedText string) (*httptest.Server, *groqCalls) {
 	t.Helper()
 	calls := &groqCalls{}
-
 	mux := http.NewServeMux()
 	mux.HandleFunc("/openai/v1/audio/transcriptions", func(w http.ResponseWriter, r *http.Request) {
 		status := calls.popStatus()
 		calls.Transcriptions.Add(1)
-
 		calls.mu.Lock()
 		calls.authHeaders = append(calls.authHeaders, r.Header.Get("Authorization"))
 		calls.mu.Unlock()
-
 		if err := r.ParseMultipartForm(4 << 20); err == nil {
 			calls.mu.Lock()
 			calls.modelFields = append(calls.modelFields, r.FormValue("model"))
@@ -204,7 +178,6 @@ func newGroqMock(t *testing.T, transcribedText string) (*httptest.Server, *groqC
 			}
 			calls.mu.Unlock()
 		}
-
 		if status != http.StatusOK {
 			w.WriteHeader(status)
 			return
@@ -212,13 +185,56 @@ func newGroqMock(t *testing.T, transcribedText string) (*httptest.Server, *groqC
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]any{"text": transcribedText})
 	})
-
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 	return srv, calls
 }
 
-// ---- Shared response helper ----
+// ---- OpenAI mock ----
+
+type openAICalls struct {
+	Completions atomic.Int32
+
+	mu       sync.Mutex
+	response string
+}
+
+func (o *openAICalls) setResponse(r string) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	o.response = r
+}
+
+func newOpenAIMock(t *testing.T, response string) (*httptest.Server, *openAICalls) {
+	t.Helper()
+	calls := &openAICalls{response: response}
+	mux := http.NewServeMux()
+	mux.HandleFunc("/v1/responses", func(w http.ResponseWriter, _ *http.Request) {
+		calls.Completions.Add(1)
+		calls.mu.Lock()
+		resp := calls.response
+		calls.mu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]any{
+			"id":     "resp_test",
+			"object": "response",
+			"output": []map[string]any{
+				{
+					"type": "message",
+					"role": "assistant",
+					"content": []map[string]any{
+						{"type": "output_text", "text": resp},
+					},
+				},
+			},
+		})
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	return srv, calls
+}
+
+// ---- helpers ----
 
 func apiResp(t *testing.T, w http.ResponseWriter, result any) {
 	t.Helper()
@@ -234,6 +250,8 @@ func apiResp(t *testing.T, w http.ResponseWriter, result any) {
 
 // ---- Update constructors ----
 
+const testFileID = "voice_file_abc"
+
 func voiceUpdate(userID int64, fileID string) models.UpdateContext {
 	return models.NewUpdateContext(tgbotapi.Update{
 		UpdateID: 1,
@@ -241,32 +259,28 @@ func voiceUpdate(userID int64, fileID string) models.UpdateContext {
 			MessageID: 100,
 			From:      &tgbotapi.User{ID: userID, FirstName: "Test"},
 			Chat:      &tgbotapi.Chat{ID: userID, Type: "private"},
-			Voice: &tgbotapi.Voice{
-				FileID:   fileID,
-				Duration: 3,
-				MimeType: "audio/ogg",
-			},
+			Voice:     &tgbotapi.Voice{FileID: fileID, Duration: 3, MimeType: "audio/ogg"},
 		},
 	})
 }
 
-func callbackUpdate(userID int64, callbackData string) models.UpdateContext {
+func callbackUpdate(userID int64, data string) models.UpdateContext {
 	return models.NewUpdateContext(tgbotapi.Update{
 		UpdateID: 2,
 		CallbackQuery: &tgbotapi.CallbackQuery{
-			ID:   "cq-" + callbackData,
+			ID:   "cq-" + data,
 			From: &tgbotapi.User{ID: userID, FirstName: "Test"},
 			Message: &tgbotapi.Message{
 				MessageID: 200,
 				Chat:      &tgbotapi.Chat{ID: userID},
-				From:      &tgbotapi.User{ID: 0}, // bot itself
+				From:      &tgbotapi.User{ID: 0},
 			},
-			Data: callbackData,
+			Data: data,
 		},
 	})
 }
 
-func textUpdate(userID int64, text string) models.UpdateContext {
+func textUpdateCtx(userID int64, text string) models.UpdateContext {
 	return models.NewUpdateContext(tgbotapi.Update{
 		UpdateID: 3,
 		Message: &tgbotapi.Message{
@@ -278,7 +292,7 @@ func textUpdate(userID int64, text string) models.UpdateContext {
 	})
 }
 
-func commandUpdate(userID int64, cmd string) models.UpdateContext {
+func commandUpdateCtx(userID int64, cmd string) models.UpdateContext {
 	return models.NewUpdateContext(tgbotapi.Update{
 		UpdateID: 4,
 		Message: &tgbotapi.Message{
@@ -286,23 +300,25 @@ func commandUpdate(userID int64, cmd string) models.UpdateContext {
 			From:      &tgbotapi.User{ID: userID, FirstName: "Test"},
 			Chat:      &tgbotapi.Chat{ID: userID, Type: "private"},
 			Text:      "/" + cmd,
-			Entities: []tgbotapi.MessageEntity{
-				{Type: "bot_command", Offset: 0, Length: len(cmd) + 1},
-			},
+			Entities:  []tgbotapi.MessageEntity{{Type: "bot_command", Offset: 0, Length: len(cmd) + 1}},
 		},
 	})
 }
 
 // ---- Full wired environment ----
 
+const testUserID = int64(42)
+
 type testEnv struct {
-	tgCalls     *telegramCalls
-	groqCalls   *groqCalls
-	tgClient    *telegram.Client
-	groqSrvURL  string // base URL of the groq mock server, for constructing additional clients
-	engine      *flows.Engine
-	prefs       *store.InMemoryPrefs
-	dispatch    *minDispatcher
+	tgCalls    *telegramCalls
+	groqCalls  *groqCalls
+	aiCalls    *openAICalls
+	tgClient   *telegram.Client
+	groqSrvURL string
+	aiSrvURL   string
+	engine     *flows.Engine
+	prefs      *store.InMemoryPrefs
+	dispatch   *minDispatcher
 
 	voice    *handlers.VoiceHandler
 	text     *handlers.TextHandler
@@ -310,12 +326,13 @@ type testEnv struct {
 	cmd      *handlers.CommandHandler
 }
 
-func newEnv(t *testing.T, transcribedText string) *testEnv {
+func newEnv(t *testing.T, transcribedText, aiResponse string) *testEnv {
 	t.Helper()
 
 	fakeAudio := []byte("OGG-BYTES")
 	tgSrv, tgCalls := newTelegramMock(t, "voice/test.ogg", fakeAudio)
 	groqSrv, groqCalls := newGroqMock(t, transcribedText)
+	aiSrv, aiCalls := newOpenAIMock(t, aiResponse)
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 
@@ -327,22 +344,27 @@ func newEnv(t *testing.T, transcribedText string) *testEnv {
 		groq.WithBaseURL(groqSrv.URL),
 		groq.WithRetryDelay(0),
 	)
+	aiClient := openai.NewClient("test-openai-key", "gpt-4o",
+		openai.WithBaseURL(aiSrv.URL),
+	)
 
 	engine := flows.NewEngine(flows.NewInMemoryStorage())
 	prefs := store.NewInMemoryPrefs()
 
-	// Pre-set language for the standard test user so tests that don't exercise
-	// the language-selection flow proceed directly to transcription.
-	_ = prefs.SetLanguage(context.Background(), testUserID, "en")
+	// Pre-configure a fully set-up user so most tests skip the setup flow.
+	_ = prefs.SaveSettings(context.Background(), testUserID, &models.UserSettings{
+		NativeLanguage:   "en",
+		LearningLanguage: "de",
+		Level:            "B1",
+		ActiveCommand:    "from",
+	})
 
 	disp := newDispatcher()
 
 	voice := handlers.NewVoiceHandler(tgClient, groqClient, engine, prefs, logger)
-	text := handlers.NewTextHandler(tgClient, engine, logger)
+	text := handlers.NewTextHandler(tgClient, engine, prefs, aiClient, logger)
 	callback := handlers.NewCallbackHandler(tgClient, engine, prefs, logger)
-	cmd := handlers.NewCommandHandler(tgClient, engine, logger)
-	callback.SetDispatcher(disp)
-	callback.SetVoiceProcessor(voice)
+	cmd := handlers.NewCommandHandler(tgClient, engine, prefs, logger)
 
 	disp.Register(callback)
 	disp.Register(cmd)
@@ -352,8 +374,10 @@ func newEnv(t *testing.T, transcribedText string) *testEnv {
 	return &testEnv{
 		tgCalls:    tgCalls,
 		groqCalls:  groqCalls,
+		aiCalls:    aiCalls,
 		tgClient:   tgClient,
 		groqSrvURL: groqSrv.URL,
+		aiSrvURL:   aiSrv.URL,
 		engine:     engine,
 		prefs:      prefs,
 		dispatch:   disp,

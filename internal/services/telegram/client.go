@@ -10,7 +10,7 @@ import (
 	"net/http"
 	"time"
 
-	"go-telegram-template/pkg/models"
+	"deutsch-helper/pkg/models"
 )
 
 const DefaultBaseURL = "https://api.telegram.org"
@@ -144,6 +144,12 @@ func (c *Client) DownloadFile(ctx context.Context, filePath string) ([]byte, err
 func (c *Client) AnswerCallbackQuery(ctx context.Context, callbackID string) error {
 	var result bool
 	return c.postJSON(ctx, "answerCallbackQuery", &answerCallbackQueryRequest{CallbackQueryID: callbackID}, &result)
+}
+
+// SetMyCommands registers the bot's command list with Telegram so they appear in the menu.
+func (c *Client) SetMyCommands(ctx context.Context, commands []BotCommand) error {
+	var result bool
+	return c.postJSON(ctx, "setMyCommands", &setMyCommandsRequest{Commands: commands}, &result)
 }
 
 // postJSON marshals body, POSTs to the given API method, and unmarshals the result field.

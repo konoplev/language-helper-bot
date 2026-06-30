@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"go-telegram-template/internal/flows"
+	"deutsch-helper/internal/flows"
 )
 
 func TestEngineGetSetClear(t *testing.T) {

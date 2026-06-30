@@ -1,4 +1,4 @@
-module go-telegram-template
+module deutsch-helper
 
 go 1.22
 

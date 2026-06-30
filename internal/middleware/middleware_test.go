@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"go-telegram-template/internal/middleware"
-	"go-telegram-template/pkg/models"
+	"deutsch-helper/internal/middleware"
+	"deutsch-helper/pkg/models"
 )
 
 func noopUpdate() models.UpdateContext {

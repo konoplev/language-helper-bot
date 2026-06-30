@@ -3,7 +3,7 @@ package handlers
 import (
 	"context"
 
-	"go-telegram-template/pkg/models"
+	"deutsch-helper/pkg/models"
 )
 
 // Handler routes and processes a Telegram update.
@@ -12,7 +12,7 @@ type Handler interface {
 	Handle(ctx context.Context, uc models.UpdateContext) error
 }
 
-// Dispatcher is implemented by the bot dispatcher; used for re-dispatching from callback handlers.
+// Dispatcher is implemented by the bot dispatcher; used for re-dispatching.
 type Dispatcher interface {
 	Dispatch(ctx context.Context, uc models.UpdateContext) error
 }
@@ -31,21 +31,18 @@ type TelegramAPI interface {
 }
 
 // Transcriber converts audio bytes to text.
-// language is an ISO-639-1 code (e.g. "en", "ru"); empty string lets the
-// service auto-detect.
+// language is an ISO-639-1 code (e.g. "en", "de"); empty string lets the service auto-detect.
 type Transcriber interface {
 	Transcribe(ctx context.Context, audioData []byte, filename string, language string) (string, error)
 }
 
-// PrefsStore persists per-user preferences such as the chosen transcription language.
+// PrefsStore persists per-user language learning settings.
 type PrefsStore interface {
-	Language(ctx context.Context, userID int64) (string, bool)
-	SetLanguage(ctx context.Context, userID int64, lang string) error
+	GetSettings(ctx context.Context, userID int64) (*models.UserSettings, bool)
+	SaveSettings(ctx context.Context, userID int64, settings *models.UserSettings) error
 }
 
-// VoiceProcessor transcribes a voice message identified by its Telegram file_id
-// and presents the draft to the user. Used by CallbackHandler to auto-process
-// a pending voice after language selection.
-type VoiceProcessor interface {
-	ProcessVoice(ctx context.Context, chatID, userID int64, fileID, lang string) error
+// TextProcessor sends a system prompt + user text to an AI and returns the reply.
+type TextProcessor interface {
+	Complete(ctx context.Context, systemPrompt, userText string) (string, error)
 }

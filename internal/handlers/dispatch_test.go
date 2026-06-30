@@ -3,12 +3,13 @@ package handlers_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 
-	"go-telegram-template/internal/handlers"
-	"go-telegram-template/pkg/models"
+	"deutsch-helper/internal/handlers"
+	"deutsch-helper/pkg/models"
 )
 
 // stubHandler is a test double that tracks calls.
@@ -176,22 +177,30 @@ func TestCommandHandlerRouting(t *testing.T) {
 		cmd      string
 		wantText string
 	}{
-		{"start command", "start", "👋 Hello"},
-		{"help command", "help", "Available commands"},
+		// /start sends the language setup keyboard (contains "👋")
+		{"start command", "start", "👋"},
+		// Unknown command falls back to "Unknown command: /..."
 		{"unknown command", "foobar", "Unknown command"},
+		// /from /to /polish without configured prefs → guidance message
+		{"from without setup", "from", "Please run /start"},
+		{"to without setup", "to", "Please run /start"},
+		{"polish without setup", "polish", "Please run /start"},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			tg := &stubTelegram{sentMsgID: 1}
-			h := handlers.NewCommandHandler(tg, nil, nil)
+			h := handlers.NewCommandHandler(tg, nil, nil, nil)
 
 			uc := commandUpdate(1, tc.cmd)
 			if err := h.Handle(context.Background(), uc); err != nil {
 				t.Fatal(err)
 			}
-			if len(tg.sentText) == 0 {
+			if tg.sentText == "" {
 				t.Fatal("no message sent")
+			}
+			if !strings.Contains(tg.sentText, tc.wantText) {
+				t.Errorf("response %q does not contain %q", tg.sentText, tc.wantText)
 			}
 		})
 	}

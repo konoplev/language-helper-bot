@@ -10,8 +10,8 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"go-telegram-template/internal/services/telegram"
-	"go-telegram-template/pkg/models"
+	"deutsch-helper/internal/services/telegram"
+	"deutsch-helper/pkg/models"
 )
 
 // apiResp mirrors the Telegram envelope for test servers.
