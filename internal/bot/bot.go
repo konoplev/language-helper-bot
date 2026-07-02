@@ -61,9 +61,12 @@ func New(token string, pollingMode string, deps Dependencies, logger *slog.Logge
 	textHandler := handlers.NewTextHandler(deps.TelegramClient, flowEngine, deps.Prefs, deps.AI, logger)
 	callbackHandler := handlers.NewCallbackHandler(deps.TelegramClient, flowEngine, deps.Prefs, logger)
 	callbackHandler.SetDispatcher(dispatcher)
+	inlineQueryHandler := handlers.NewInlineQueryHandler(deps.TelegramClient, flowEngine, logger)
+	inlineQueryHandler.SetDispatcher(dispatcher)
 
-	// Register in priority order: callbacks first, then commands, voice, text.
+	// Register in priority order: callbacks and inline queries first, then commands, voice, text.
 	dispatcher.Register(callbackHandler)
+	dispatcher.Register(inlineQueryHandler)
 	dispatcher.Register(cmdHandler)
 	dispatcher.Register(voiceHandler)
 	dispatcher.Register(textHandler)

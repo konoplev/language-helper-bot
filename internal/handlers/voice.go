@@ -92,8 +92,8 @@ func (h *VoiceHandler) processVoice(ctx context.Context, chatID, userID int64, f
 
 	kb := models.NewInlineKeyboard(
 		models.NewKeyboardRow(
-			models.NewCallbackButton("Edit", flows.CallbackVoiceEdit),
-			models.NewCallbackButton("Send as is", flows.CallbackVoiceSendText),
+			models.NewInlineQueryCurrentChatButton("Edit ✏️", text),
+			models.NewCallbackButton("Send as is ✅", flows.CallbackVoiceSendText),
 		),
 	)
 	_, err = h.tg.SendMessageWithKeyboard(ctx, chatID, "🎙 Transcription:\n\n"+text, kb)

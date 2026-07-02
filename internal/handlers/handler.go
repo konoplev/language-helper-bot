@@ -28,6 +28,7 @@ type TelegramAPI interface {
 	GetFile(ctx context.Context, fileID string) (string, error)
 	DownloadFile(ctx context.Context, filePath string) ([]byte, error)
 	AnswerCallbackQuery(ctx context.Context, callbackID string) error
+	AnswerInlineQuery(ctx context.Context, inlineQueryID string) error
 }
 
 // Transcriber converts audio bytes to text.

@@ -29,15 +29,11 @@ func (h *TextHandler) CanHandle(uc models.UpdateContext) bool {
 }
 
 func (h *TextHandler) Handle(ctx context.Context, uc models.UpdateContext) error {
-	// If the user is in a voice flow (pending transcription or editing), handle that first.
-	for _, voiceState := range []flows.StateName{flows.StateVoicePending, flows.StateVoiceEdit} {
-		ok, err := h.flow.IsInState(ctx, uc.UserID, flows.FlowVoice, voiceState)
-		if err != nil {
-			return err
-		}
-		if ok {
-			return h.handleVoiceConfirmation(ctx, uc)
-		}
+	// If the user is in a pending voice state, treat the incoming text as the final input.
+	if ok, err := h.flow.IsInState(ctx, uc.UserID, flows.FlowVoice, flows.StateVoicePending); err != nil {
+		return err
+	} else if ok {
+		return h.handleVoiceConfirmation(ctx, uc)
 	}
 
 	// Text during setup: prompt to use the buttons.
@@ -82,7 +78,7 @@ func (h *TextHandler) handleVoiceConfirmation(ctx context.Context, uc models.Upd
 		return err
 	}
 	settings.ActiveCommand = activeCommand
-	return h.processText(ctx, uc, settings, uc.Update.Message.Text)
+	return h.processText(ctx, uc, settings, stripBotMention(uc.Update.Message.Text))
 }
 
 // processText calls the AI with the appropriate prompt and sends the result back.

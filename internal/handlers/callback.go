@@ -47,8 +47,6 @@ func (h *CallbackHandler) Handle(ctx context.Context, uc models.UpdateContext) e
 	case strings.HasPrefix(cq.Data, flows.CallbackSetupLevelPrefix):
 		level := strings.TrimPrefix(cq.Data, flows.CallbackSetupLevelPrefix)
 		return h.handleSetupLevel(ctx, uc, level)
-	case cq.Data == flows.CallbackVoiceEdit:
-		return h.handleVoiceEdit(ctx, uc)
 	case cq.Data == flows.CallbackVoiceSendText:
 		return h.handleVoiceSendAsIs(ctx, uc)
 	default:
@@ -156,23 +154,6 @@ func (h *CallbackHandler) handleSetupLevel(ctx context.Context, uc models.Update
 		models.LanguageName(learningLang), models.LanguageName(nativeLang),
 		models.LanguageName(learningLang),
 	))
-	return err
-}
-
-// handleVoiceEdit transitions the voice state to "edit" so the next text message is the correction.
-func (h *CallbackHandler) handleVoiceEdit(ctx context.Context, uc models.UpdateContext) error {
-	st, err := h.flow.GetState(ctx, uc.UserID)
-	if err != nil {
-		return err
-	}
-	if st == nil {
-		return nil
-	}
-	st.State = flows.StateVoiceEdit
-	if err := h.flow.SetState(ctx, st); err != nil {
-		return err
-	}
-	_, err = h.tg.SendMessage(ctx, uc.ChatID, "Please type your correction:")
 	return err
 }
 

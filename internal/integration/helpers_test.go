@@ -55,11 +55,12 @@ func (d *minDispatcher) Dispatch(ctx context.Context, uc models.UpdateContext) e
 // ---- Telegram mock ----
 
 type telegramCalls struct {
-	GetFile        atomic.Int32
-	DownloadFile   atomic.Int32
-	SendMessage    atomic.Int32
-	AnswerCallback atomic.Int32
-	SetCommands    atomic.Int32
+	GetFile           atomic.Int32
+	DownloadFile      atomic.Int32
+	SendMessage       atomic.Int32
+	AnswerCallback    atomic.Int32
+	AnswerInlineQuery atomic.Int32
+	SetCommands       atomic.Int32
 
 	mu          sync.Mutex
 	sentTexts   []string
@@ -117,6 +118,11 @@ func newTelegramMock(t *testing.T, filePath string, fileBytes []byte) (*httptest
 
 	mux.HandleFunc(apiPrefix+"answerCallbackQuery", func(w http.ResponseWriter, _ *http.Request) {
 		calls.AnswerCallback.Add(1)
+		apiResp(t, w, true)
+	})
+
+	mux.HandleFunc(apiPrefix+"answerInlineQuery", func(w http.ResponseWriter, _ *http.Request) {
+		calls.AnswerInlineQuery.Add(1)
 		apiResp(t, w, true)
 	})
 

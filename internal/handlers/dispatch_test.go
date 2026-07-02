@@ -50,7 +50,8 @@ func (s *stubTelegram) EditMessageText(_ context.Context, _ int64, _ int, _ stri
 func (s *stubTelegram) DeleteMessage(_ context.Context, _ int64, _ int) error              { return nil }
 func (s *stubTelegram) GetFile(_ context.Context, _ string) (string, error)                { return "", nil }
 func (s *stubTelegram) DownloadFile(_ context.Context, _ string) ([]byte, error)           { return nil, nil }
-func (s *stubTelegram) AnswerCallbackQuery(_ context.Context, _ string) error              { return nil }
+func (s *stubTelegram) AnswerCallbackQuery(_ context.Context, _ string) error { return nil }
+func (s *stubTelegram) AnswerInlineQuery(_ context.Context, _ string) error   { return nil }
 
 func textUpdate(userID int64, text string) models.UpdateContext {
 	return models.UpdateContext{

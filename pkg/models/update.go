@@ -11,6 +11,7 @@ const (
 	UpdateTypeAudio         UpdateType = "audio"
 	UpdateTypeImage         UpdateType = "image"
 	UpdateTypeCallbackQuery UpdateType = "callback_query"
+	UpdateTypeInlineQuery   UpdateType = "inline_query"
 	UpdateTypeUnknown       UpdateType = "unknown"
 )
 
@@ -49,6 +50,12 @@ func NewUpdateContext(update tgbotapi.Update) UpdateContext {
 			uc.ChatID = update.CallbackQuery.Message.Chat.ID
 		}
 		uc.Type = UpdateTypeCallbackQuery
+
+	case update.InlineQuery != nil:
+		uc.UserID = update.InlineQuery.From.ID
+		// Inline queries have no chat; private chat ID equals the user ID.
+		uc.ChatID = update.InlineQuery.From.ID
+		uc.Type = UpdateTypeInlineQuery
 	}
 
 	return uc

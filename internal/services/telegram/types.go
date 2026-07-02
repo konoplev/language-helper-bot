@@ -75,3 +75,8 @@ type answerCallbackQueryRequest struct {
 type setMyCommandsRequest struct {
 	Commands []BotCommand `json:"commands"`
 }
+
+type answerInlineQueryRequest struct {
+	InlineQueryID string        `json:"inline_query_id"`
+	Results       []interface{} `json:"results"`
+}

@@ -93,6 +93,7 @@ func (c *Client) Complete(ctx context.Context, systemPrompt, userText string) (s
 		slog.String("model", c.model),
 		slog.Int("prompt_len", len(systemPrompt)),
 		slog.Int("input_len", len(userText)),
+		slog.String("user text", userText),
 	)
 
 	resp, err := c.http.Do(req)
@@ -137,3 +138,4 @@ func (c *Client) Complete(ctx context.Context, systemPrompt, userText string) (s
 
 	return "", fmt.Errorf("no text content in openai response")
 }
+

@@ -146,6 +146,15 @@ func (c *Client) AnswerCallbackQuery(ctx context.Context, callbackID string) err
 	return c.postJSON(ctx, "answerCallbackQuery", &answerCallbackQueryRequest{CallbackQueryID: callbackID}, &result)
 }
 
+// AnswerInlineQuery responds to an inline query with an empty result set, dismissing the loading spinner.
+func (c *Client) AnswerInlineQuery(ctx context.Context, inlineQueryID string) error {
+	var result bool
+	return c.postJSON(ctx, "answerInlineQuery", &answerInlineQueryRequest{
+		InlineQueryID: inlineQueryID,
+		Results:       []interface{}{},
+	}, &result)
+}
+
 // SetMyCommands registers the bot's command list with Telegram so they appear in the menu.
 func (c *Client) SetMyCommands(ctx context.Context, commands []BotCommand) error {
 	var result bool
