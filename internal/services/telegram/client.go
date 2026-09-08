@@ -155,10 +155,34 @@ func (c *Client) AnswerInlineQuery(ctx context.Context, inlineQueryID string) er
 	}, &result)
 }
 
-// SetMyCommands registers the bot's command list with Telegram so they appear in the menu.
-func (c *Client) SetMyCommands(ctx context.Context, commands []BotCommand) error {
+// SetMyCommands registers the bot's command list for the given scope so they
+// appear in the menu. An empty scope targets the default scope.
+func (c *Client) SetMyCommands(ctx context.Context, commands []BotCommand, scope string) error {
 	var result bool
-	return c.postJSON(ctx, "setMyCommands", &setMyCommandsRequest{Commands: commands}, &result)
+	req := &setMyCommandsRequest{Commands: commands}
+	if scope != "" {
+		req.Scope = &BotCommandScope{Type: scope}
+	}
+	return c.postJSON(ctx, "setMyCommands", req, &result)
+}
+
+// DeleteMyCommands clears the bot's command list for the given scope. An empty
+// scope targets the default scope. Used to drop stale commands left over from a
+// previous bot that shared this token.
+func (c *Client) DeleteMyCommands(ctx context.Context, scope string) error {
+	var result bool
+	req := &deleteMyCommandsRequest{}
+	if scope != "" {
+		req.Scope = &BotCommandScope{Type: scope}
+	}
+	return c.postJSON(ctx, "deleteMyCommands", req, &result)
+}
+
+// ResetChatMenuButton sets the chat menu button back to the default "commands"
+// button, undoing any web-app button configured for a previous bot.
+func (c *Client) ResetChatMenuButton(ctx context.Context) error {
+	var result bool
+	return c.postJSON(ctx, "setChatMenuButton", &setChatMenuButtonRequest{MenuButton: menuButton{Type: "commands"}}, &result)
 }
 
 // postJSON marshals body, POSTs to the given API method, and unmarshals the result field.

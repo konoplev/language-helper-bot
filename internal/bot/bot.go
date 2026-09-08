@@ -99,9 +99,7 @@ func New(token string, pollingMode string, deps Dependencies, logger *slog.Logge
 
 // Run registers bot commands with Telegram and starts polling/webhook.
 func (b *Bot) Run(ctx context.Context) error {
-	if err := b.tgClient.SetMyCommands(ctx, botCommands()); err != nil {
-		b.logger.Warn("failed to register bot commands", slog.String("error", err.Error()))
-	}
+	b.registerCommands(ctx)
 
 	switch b.pollingMode {
 	case PollingModeWebhook:
@@ -135,11 +133,32 @@ func (b *Bot) runPolling(ctx context.Context) error {
 	}
 }
 
+// registerCommands publishes this bot's command menu. It first clears command
+// lists on the more specific scopes (and the menu button), because Telegram
+// resolves a chat's menu from the most specific non-empty scope — stale entries
+// left on this token by a previous bot would otherwise shadow our default list.
+func (b *Bot) registerCommands(ctx context.Context) {
+	for _, scope := range []string{"all_private_chats", "all_group_chats", "all_chat_administrators"} {
+		if err := b.tgClient.DeleteMyCommands(ctx, scope); err != nil {
+			b.logger.Warn("failed to clear stale bot commands",
+				slog.String("scope", scope), slog.String("error", err.Error()))
+		}
+	}
+
+	if err := b.tgClient.ResetChatMenuButton(ctx); err != nil {
+		b.logger.Warn("failed to reset chat menu button", slog.String("error", err.Error()))
+	}
+
+	if err := b.tgClient.SetMyCommands(ctx, botCommands(), ""); err != nil {
+		b.logger.Warn("failed to register bot commands", slog.String("error", err.Error()))
+	}
+}
+
 func botCommands() []telegram.BotCommand {
 	return []telegram.BotCommand{
 		{Command: "start", Description: "Configure your language pair and level"},
 		{Command: "from", Description: "Translate from your native language"},
 		{Command: "to", Description: "Translate to your native language"},
-		{Command: "polish", Description: "Grammar check and improve your text"},
+		{Command: "polish", Description: "Correct, translate and break down your text"},
 	}
 }
