@@ -112,7 +112,7 @@ func (h *CommandHandler) activateCommand(ctx context.Context, uc models.UpdateCo
 			models.LanguageName(settings.NativeLanguage),
 			models.LanguageName(settings.LearningLanguage))
 	case CmdPolish:
-		prompt = fmt.Sprintf("✅ Mode: Grammar check & correction (%s, %s level)\n\nSend text or voice in %s:",
+		prompt = fmt.Sprintf("✅ Mode: Grammar check, correction, translation & structure breakdown (%s, %s level)\n\nSend text or voice in %s:",
 			models.LanguageName(settings.LearningLanguage),
 			settings.Level,
 			models.LanguageName(settings.LearningLanguage))

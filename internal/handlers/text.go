@@ -127,11 +127,21 @@ func buildPrompt(s *models.UserSettings) string {
 				"Their native language is %s.\n\n"+
 				"Analyze the student's text written in %s and provide your response in this exact structure:\n\n"+
 				"Original:\n[copy the original text here]\n\n"+
-				"Mistakes:\n[numbered list of mistakes — grammar, spelling, word choice, style]\n\n"+
+				"Mistakes:\n[numbered list of mistakes — grammar, spelling, word choice, style. "+
+				"Write \"None\" if the text is already correct.]\n\n"+
 				"Explanations:\n[for each mistake: explain in %s, state the grammar rule being violated, "+
 				"include a corrected example]\n\n"+
-				"Improved version:\n[corrected text that is as close as possible to the original style]",
-			learning, s.Level, native, learning, native)
+				"Corrected:\n[the corrected text, as close as possible to the original style. "+
+				"If there were no mistakes, repeat the original text.]\n\n"+
+				"Translation:\n[translate the Corrected text into %s]\n\n"+
+				"Structure:\n[break down the Corrected sentence(s). For every notable word give its role. "+
+				"For nouns: dictionary form with article, grammatical gender, and singular/plural (and the plural form). "+
+				"For verbs: infinitive, whether it is reflexive, whether it has a separable prefix (name the prefix), "+
+				"tense/mood used, and any governed case or preposition. "+
+				"For adjectives: the declension ending and why. "+
+				"Mention any case governed by prepositions in the sentence. "+
+				"Write this section in %s.]",
+			learning, s.Level, native, learning, native, native, native)
 
 	default:
 		return ""

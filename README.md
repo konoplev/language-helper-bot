@@ -11,7 +11,7 @@ A Telegram bot for language learning. It helps you translate text between your n
 - **Three commands, always available** in the Telegram command menu:
   - `/from` — translate text from your native language into the language you're learning, at your level.
   - `/to` — translate text from the language you're learning into your native language.
-  - `/polish` — find grammar and style mistakes, explain each one (in your native language), and propose a corrected version.
+  - `/polish` — find grammar and style mistakes, explain each one (in your native language), propose a corrected version, translate it, and break down its grammatical structure.
 - **Voice input** — for any active command, you can send a voice message instead of typing:
   1. The bot transcribes the audio and sends the transcription back.
   2. You confirm or edit it by sending your final text.
@@ -110,8 +110,16 @@ Explanations:
 1. [explanation in your native language, including the grammar rule]
 2. ...
 
-Improved version:
-[corrected text close to your original]
+Corrected:
+[corrected text close to your original — or your text unchanged if it was already correct]
+
+Translation:
+[the corrected text translated into your native language]
+
+Structure:
+[word-by-word breakdown of the corrected sentence: noun gender and
+ singular/plural, verb reflexivity and separable prefixes, adjective
+ endings, cases governed by prepositions, etc.]
 ```
 
 ### Voice input

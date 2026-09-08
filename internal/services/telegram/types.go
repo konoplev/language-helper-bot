@@ -72,8 +72,27 @@ type answerCallbackQueryRequest struct {
 	Text            string `json:"text,omitempty"`
 }
 
+// BotCommandScope limits the chats for which a command list applies. Only the
+// discriminator "type" is needed for the scopes this bot uses.
+type BotCommandScope struct {
+	Type string `json:"type"`
+}
+
 type setMyCommandsRequest struct {
-	Commands []BotCommand `json:"commands"`
+	Commands []BotCommand     `json:"commands"`
+	Scope    *BotCommandScope `json:"scope,omitempty"`
+}
+
+type deleteMyCommandsRequest struct {
+	Scope *BotCommandScope `json:"scope,omitempty"`
+}
+
+type setChatMenuButtonRequest struct {
+	MenuButton menuButton `json:"menu_button"`
+}
+
+type menuButton struct {
+	Type string `json:"type"`
 }
 
 type answerInlineQueryRequest struct {

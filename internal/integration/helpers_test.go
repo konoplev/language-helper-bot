@@ -131,6 +131,14 @@ func newTelegramMock(t *testing.T, filePath string, fileBytes []byte) (*httptest
 		apiResp(t, w, true)
 	})
 
+	mux.HandleFunc(apiPrefix+"deleteMyCommands", func(w http.ResponseWriter, _ *http.Request) {
+		apiResp(t, w, true)
+	})
+
+	mux.HandleFunc(apiPrefix+"setChatMenuButton", func(w http.ResponseWriter, _ *http.Request) {
+		apiResp(t, w, true)
+	})
+
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 	return srv, calls
